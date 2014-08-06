@@ -42,6 +42,8 @@ cat << EOF | column -s\& -t
    -h|--help & Show this message
    -v|--version & Show version information
    -d|--database & Name of database <default is BA2R>
+   -t|--threads & Number of threads to use for BLAST <default is 1>
+   -s|--skip & Skip BLAST if files exist
 
 EOF
 }
@@ -60,6 +62,12 @@ if [ ! -r $file ]; then
 fi
 }
 
+is_command_available()
+{
+command=$1
+command -v $command >/dev/null 2>&1 || { echo >&2 "$PROGNAME requires '$command' to be in the current path.  Aborting."; exit 1; }
+}
+
 setup_temp_file()
 {
         local tmp=`basename $0`
@@ -71,8 +79,8 @@ setup_temp_file()
 }
 
 # parse arguments
-SHORTOPTS="hvd:"
-LONGOPTS="help,version,database:"
+SHORTOPTS="hvsd:t:"
+LONGOPTS="help,version,skip,database:,threads:"
 ARGS=$(getopt -s bash --options $SHORTOPTS --longoptions $LONGOPTS --name $PROGNAME -- "$@")
 if [ $? != 0 ]; then usage; exit 1; fi
 eval set -- "$ARGS"
@@ -91,6 +99,14 @@ while true; do
                         DATABASE=$2
                         shift 2
                         ;;
+		-t|--threads)
+			THREADS=$2
+			shift 2
+			;;
+		-s|--skip)
+			SKIP=1
+			shift
+			;;
                 --) 
                         shift
                         break
@@ -102,12 +118,13 @@ while true; do
         esac
 done
 
-if [ "$#" -ne 1 ]; then
+if [ "$#" -ne 3 ]; then
         usage
         exit 1
 fi
 
 defined DATABASE || DATABASE=RA2R
+defined THREADS || THREADS=1
 
 REF_FASTA=$1
 is_file_readable $REF_FASTA
@@ -116,6 +133,29 @@ is_file_readable $REF_GENBANK
 ASM_FASTA=$3
 is_file_readable $ASM_FASTA
 
+is_command_available makeblastdb
+is_command_available blastn
+
 echo "reference data - FASTA = $REF_FASTA - GENBANK = $REF_GENBANK"
 echo "assembly data - FASTA = $ASM_FASTA"
 echo "database name = $DATABASE"
+
+echo "----"
+
+echo "making BLAST databases"
+makeblastdb -in $REF_FASTA -dbtype nucl -title "Reference genome" -parse_seqids -hash_index -out reference -logfile reference.makeblastdb.log
+makeblastdb -in $ASM_FASTA -dbtype nucl -title "Assembled genome" -parse_seqids -hash_index -out assembled -logfile assembled.makeblastdb.log
+
+echo "running BLASTN"
+if [ ! -z "$SKIP" ] && [ -e asm_vs_ref.blast6 ]; then
+	echo "skipping BLASTN for query = $ASM_FASTA and subject = $REF_FASTA"
+else
+	echo "BLASTing $ASM_FASTA against reference genome"
+	blastn -db reference -query $ASM_FASTA -outfmt 6 -num_threads $THREADS > asm_vs_ref.blast6
+fi
+if [ ! -z "$SKIP" ] && [ -e ref_vs_asm.blast6 ]; then
+	echo "skipping BLASTN for query = $REF_FASTA and subject = $ASM_FASTA"
+else
+	echo "BLASTing $REF_FASTA against assembled genome"
+	blastn -db assembled -query $REF_FASTA -outfmt 6 -num_threads $THREADS > ref_vs_asm.blast6
+fi
