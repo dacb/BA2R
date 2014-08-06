@@ -1,3 +1,3 @@
 #!/bin/bash
 
-./BA2R test/5G.fasta test/5G.genbank test/5GB1.assembly.fasta
+./BA2R -t 8 -s test/5G.fasta test/5G.genbank test/5GB1.assembly.fasta
