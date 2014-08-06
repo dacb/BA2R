@@ -55,27 +55,68 @@ defined()
 
 is_file_readable()
 {
-file=$1
-if [ ! -r $file ]; then
-        echo "$0: unable to read file: $file"
-        exit 1
-fi
+	local file=$1
+	if [ ! -r $file ]; then
+		echo "$0: unable to read file: $file"
+		exit 1
+	fi
 }
 
 is_command_available()
 {
-command=$1
-command -v $command >/dev/null 2>&1 || { echo >&2 "$PROGNAME requires '$command' to be in the current path.  Aborting."; exit 1; }
+	local command=$1
+	command -v $command >/dev/null 2>&1 || { echo >&2 "$PROGNAME requires '$command' to be in the current path.  Aborting."; exit 1; }
 }
 
 setup_temp_file()
 {
-        local tmp=`basename $0`
-        TMPFILE=`mktemp -q /tmp/${tmp}.XXXXXX`
-        if [ $? -ne 0 ]; then
-                echo "$0: unable to create temporary file"
-                exit 1
-        fi
+	local tmp=`basename $0`
+	TMPFILE=`mktemp -q /tmp/${tmp}.XXXXXX`
+	if [ $? -ne 0 ]; then
+		echo "$0: unable to create temporary file"
+		exit 1
+	fi
+}
+
+blast6_file_to_db()
+{
+	local db=$1
+	local table=$2
+	local file=$3
+	echo "* $file to $table in $db"
+	cat << EOF | sqlite3 $db
+DROP TABLE IF EXISTS $table;
+CREATE TABLE $table (
+	qseqid varchar(128) NOT NULL,
+	sseqid varchar(128) NOT NULL,
+	pident FLOAT NOT NULL,
+	length INTEGER UNSIGNED NOT NULL,
+	mismatch INTEGER UNSIGNED NOT NULL,
+	gapopen INTEGER UNSIGNED NOT NULL,
+	qstart INTEGER UNSIGNED NOT NULL,
+	qend INTEGER UNSIGNED NOT NULL,
+	sstart INTEGER UNSIGNED NOT NULL,
+	send INTEGER UNSIGNED NOT NULL,
+	evalue DOUBLE NOT NULL,
+	bitscore INTEGER UNSIGNED NOT NULL
+);
+.mode tabs
+.import $file $table
+CREATE INDEX ${table}_qseqid ON $table (qseqid);
+CREATE INDEX ${table}_sseqid ON $table (sseqid);
+EOF
+}
+
+extract_tab_from_db()
+{
+	local db=$1
+	local table=$2
+	local tab=$table.tab
+	echo "* $table from $db to $tab"
+	cat << EOF | sqlite3 $DATABASE > $tab
+.mode tabs
+SELECT * FROM $table WHERE evalue = 0 ORDER BY qseqid, sseqid, qstart;
+EOF
 }
 
 # parse arguments
@@ -123,7 +164,7 @@ if [ "$#" -ne 3 ]; then
         exit 1
 fi
 
-defined DATABASE || DATABASE=RA2R.db
+defined DATABASE || DATABASE=BA2R.db
 defined THREADS || THREADS=1
 
 REF_FASTA=$1
@@ -150,12 +191,16 @@ echo "* database name     = $DATABASE"
 echo "----"
 
 echo "populating the database from input files:"
-echo "* loading $REF_FASTA to table ref_seqs"
-awk -f $FA2SQL -v create_table=1 -v table="ref_seqs" $REF_FASTA | sqlite3 $DATABASE
-echo "* loading $REF_GENBANK to table ref_genes"
-awk -f $GB2SQL -v create_table=1 -v table="ref_genes" $REF_GENBANK | sqlite3 $DATABASE
-echo "* loading $ASM_FASTA to table asm_seqs"
-awk -f $FA2SQL -v create_table=1 -v table="asm_seqs" $ASM_FASTA | sqlite3 $DATABASE
+if [ -e $DATABASE ]; then
+	echo "* skipping loading the database"
+else
+	echo "* loading $REF_FASTA to table ref_seqs"
+	awk -f $FA2SQL -v create_table=1 -v table="ref_seqs" $REF_FASTA | sqlite3 $DATABASE
+	echo "* loading $REF_GENBANK to table ref_genes"
+	awk -f $GB2SQL -v create_table=1 -v table="ref_genes" $REF_GENBANK | sqlite3 $DATABASE
+	echo "* loading $ASM_FASTA to table asm_seqs"
+	awk -f $FA2SQL -v create_table=1 -v table="asm_seqs" $ASM_FASTA | sqlite3 $DATABASE
+fi
 echo "----"
 
 echo "making BLAST databases:"
@@ -185,6 +230,12 @@ else
 	echo "* BLASTing $REF_FASTA against assembled genome"
 	blastn -db assembled -query $REF_FASTA -outfmt 6 -num_threads $THREADS > ref_vs_asm.blast6
 fi
-
+echo "loading results to SQL table: "
+blast6_file_to_db $DATABASE asm_vs_ref asm_vs_ref.blast6
+blast6_file_to_db $DATABASE ref_vs_asm ref_vs_asm.blast6
 echo "----"
 
+echo "extracting tables for processing:"
+extract_tab_from_db $DATABASE asm_vs_ref 
+extract_tab_from_db $DATABASE ref_vs_asm
+echo "processing table:"

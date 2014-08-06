@@ -8,9 +8,9 @@ BEGIN {
 
 /^>/ {
 	++s;
-	split($1, a, "|"); 
-	split(a[4], b, "."); 
-	locus[s] = b[1]; 
+	loc=$1;
+	sub(">", "", loc);
+	locus[s] = loc;
 	description[s] = $2;
 	for (i = 3; i <= NF; ++i)
 		description[s] = description[s] " " $i; 
