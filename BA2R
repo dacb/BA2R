@@ -1,3 +1,111 @@
 #!/bin/bash
 
+# Copyright (C) 2014
+# David A. C. Beck
+# dacb@u.washington.edu
+# Chemical Engineering & eScience Institute
+# University of Washington, Seattle
+#
+# Date: 12/02/2014
+# See version and usage information below
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+
+PROGNAME=${0##*/}
+PROGVERSION=0.1.0
+
+HOME=`dirname $0`
+
+usage()
+{
+cat << EOF
+
+Usage: $0 [options] <reference genome fasta> <reference genome genbank> <assembly fasta>
+
+This script performs a suite of analyses of a genome assembly against a reference genome.
+
+Options:
+EOF
+cat << EOF | column -s\& -t
+   -h|--help & Show this message
+   -v|--version & Show version information
+   -d|--database & Name of database <default is BA2R>
+
+EOF
+}
+
+defined()
+{
+[ "${!1-one}" == "${!1-two}" ]
+}
+
+is_file_readable()
+{
+file=$1
+if [ ! -r $file ]; then
+        echo "$0: unable to read file: $file"
+        exit 1
+fi
+}
+
+setup_temp_file()
+{
+        local tmp=`basename $0`
+        TMPFILE=`mktemp -q /tmp/${tmp}.XXXXXX`
+        if [ $? -ne 0 ]; then
+                echo "$0: unable to create temporary file"
+                exit 1
+        fi
+}
+
+# parse arguments
+SHORTOPTS="hvd:"
+LONGOPTS="help,version,database:"
+ARGS=$(getopt -s bash --options $SHORTOPTS --longoptions $LONGOPTS --name $PROGNAME -- "$@")
+if [ $? != 0 ]; then usage; exit 1; fi
+eval set -- "$ARGS"
+# loop through options
+while true; do
+        case $1 in
+                -h|--help)
+                        usage
+                        exit 0
+                        ;;
+                -v|--version)
+                        echo "$PROGVERSION"
+                        exit 0
+                        ;;
+                -d|--database)
+                        DATABASE=$2
+                        shift 2
+                        ;;
+                --) 
+                        shift
+                        break
+                        ;;
+                *) 
+                        shift
+                        break
+                        ;;
+        esac
+done
+
+if [ "$#" -ne 1 ]; then
+        usage
+        exit 1
+fi
+
+defined DATABASE || DATABASE=RA2R
 
