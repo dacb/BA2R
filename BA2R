@@ -109,3 +109,13 @@ fi
 
 defined DATABASE || DATABASE=RA2R
 
+REF_FASTA=$1
+is_file_readable $REF_FASTA
+REF_GENBANK=$2
+is_file_readable $REF_GENBANK
+ASM_FASTA=$3
+is_file_readable $ASM_FASTA
+
+echo "reference data - FASTA = $REF_FASTA - GENBANK = $REF_GENBANK"
+echo "assembly data - FASTA = $ASM_FASTA"
+echo "database name = $DATABASE"
