@@ -148,6 +148,7 @@ load_find_results()
 {
 	local file=$1.find.tab
 	local table=${1}_find
+	echo "* $file to $table in $DATABASE"
 	cat << EOF | sqlite3 $DATABASE
 DROP TABLE IF EXISTS $table;
 CREATE TABLE $table (
@@ -165,6 +166,24 @@ CREATE INDEX ${table}_id ON $table (id);
 CREATE INDEX ${table}_qseqid ON $table (qseqid);
 CREATE INDEX ${table}_sseqid ON $table (sseqid);
 CREATE INDEX ${table}_full ON $table (qseqid, sseqid, qstart, qend, sstart, send);
+EOF
+}
+
+extract_and_annotate_find()
+{
+	local table=$1
+	local ftable=${1}_find
+	local out=$1.xls
+	cat << EOF | sqlite3 $DATABASE > $out
+.mode tabs
+SELECT f.id, f.qseqid, f.sseqid, f.sstart, f.send, g.product, g.start_coord, g.end_coord,
+		b.pident, b.length, b.gapopen, b.mismatch, b.evalue, b.bitscore
+	FROM $ftable AS f
+		LEFT JOIN $table AS b ON f.qseqid = b.qseqid AND f.sseqid = b.sseqid 
+			AND f.qstart = b.qstart AND f.qend = b.qend
+			AND f.sstart = b.sstart AND f.send = b.send
+		LEFT JOIN ref_genes AS g ON (f.sstart >= g.start_coord AND f.sstart <= g.end_coord) OR (f.send >= g.start_coord AND f.send <= g.end_coord)
+;
 EOF
 }
 
@@ -269,10 +288,13 @@ echo "extracting tables for processing:"
 extract_tab_from_db asm_vs_ref 
 extract_tab_from_db ref_vs_asm
 echo "processing table:"
-echo " * asm_vs_ref"
+echo "* asm_vs_ref"
 awk -F'\t' -f $FIND asm_vs_ref.tab > asm_vs_ref.find.tab
-echo " * ref_vs_asm"
+echo "* ref_vs_asm"
 awk -F'\t' -f $FIND ref_vs_asm.tab > ref_vs_asm.find.tab
 echo "loading processed table results:"
 load_find_results asm_vs_ref
 load_find_results ref_vs_asm
+echo "extracting annotated results:"
+extract_and_annotate_find asm_vs_ref
+extract_and_annotate_find ref_vs_asm
