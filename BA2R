@@ -178,6 +178,8 @@ FA2SQL=$HOME/fa2sql.awk
 is_file_readable $FA2SQL
 GB2SQL=$HOME/gb2sql.awk
 is_file_readable $GB2SQL
+FIND=$HOME/find.awk
+is_file_readable $FIND
 
 is_command_available sqlite3
 is_command_available makeblastdb
@@ -239,3 +241,4 @@ echo "extracting tables for processing:"
 extract_tab_from_db $DATABASE asm_vs_ref 
 extract_tab_from_db $DATABASE ref_vs_asm
 echo "processing table:"
+awk -F'\t' -f $FIND asm_vs_ref.tab
