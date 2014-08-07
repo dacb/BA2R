@@ -176,7 +176,7 @@ extract_and_annotate_find()
 	local out=$1.xls
 	cat << EOF | sqlite3 $DATABASE > $out
 .mode tabs
-SELECT f.id, f.qseqid, f.sseqid, f.sstart, f.send, g.product, g.start_coord, g.end_coord,
+SELECT f.id, f.qseqid, f.sseqid, f.sstart, f.send, g.locus_tag, g.product, g.start_coord, g.end_coord,
 		b.pident, b.length, b.gapopen, b.mismatch, b.evalue, b.bitscore
 	FROM $ftable AS f
 		LEFT JOIN $table AS b ON f.qseqid = b.qseqid AND f.sseqid = b.sseqid 
